@@ -1,0 +1,416 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Smart Study Planner</title>
+  <style>
+    :root {
+      --bg:#0f1724;
+      --card:#0b1220;
+      --muted:#9aa7b2;
+      --accent:#7c9cff;
+      --danger:#ff6b6b;
+      --glass: rgba(255,255,255,0.03);
+      --radius:12px;
+      font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    }
+    *{box-sizing:border-box;}
+    body{margin:0; min-height:100vh; background:linear-gradient(180deg,#071028 0%, #081225 60%); color:#e6eef6;}
+    .app{max-width:1100px; margin:28px auto; padding:20px;}
+    header{display:flex; align-items:center; gap:16px;}
+    h1{margin:0; font-size:20px;}
+    .top{display:grid; grid-template-columns:1fr 360px; gap:18px; margin-top:18px;}
+    .card{background:var(--card); padding:14px; border-radius:var(--radius); box-shadow: 0 6px 18px rgba(3,8,18,0.6);}
+    label{display:block; font-size:13px; color:var(--muted); margin-bottom:6px;}
+    input,textarea,select{width:100%; padding:10px; border-radius:8px; border:1px solid rgba(255,255,255,0.04); background:var(--glass); color:inherit;}
+    textarea{min-height:70px; resize:vertical;}
+    select{background:#fff; color:#000;}
+    .row{display:flex; gap:10px;}
+    .btn{display:inline-block;padding:10px 12px;border-radius:10px;background:linear-gradient(180deg,var(--accent),#556fff); color:#fff; border:none; cursor:pointer;}
+    .btn.ghost{background:transparent;border:1px solid rgba(255,255,255,0.06);}
+    .tasks{margin-top:12px; max-height:420px; overflow:auto;}
+    .task{display:flex; align-items:center; gap:12px; padding:10px; border-radius:10px; margin-bottom:10px; background: linear-gradient(90deg, rgba(255,255,255,0.01), rgba(255,255,255,0.02)); cursor: pointer;}
+    .task .meta{flex:1;}
+    .task .title{font-weight:600;}
+    .small{font-size:13px; color:var(--muted);}
+    .progress{height:8px; background:rgba(0,0,0,0.25); border-radius:8px; overflow:hidden;}
+    .progress > i{display:block; height:100%; background:linear-gradient(90deg,var(--accent),#9bd3ff);}
+    .controls{display:flex; gap:8px;}
+    .timeline-wrap{margin-top:18px;}
+    canvas#lineChart{width:100%; height:300px; background:var(--card); border-radius:8px;}
+    @media (max-width:880px){.top{grid-template-columns:1fr;}}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <img src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='46' height='46'><rect rx='10' width='46' height='46' fill='%237c9cff'/><text x='50%25' y='60%25' font-size='20' font-family='Arial' text-anchor='middle' fill='white'>SS</text></svg>" alt="logo" style="width:46px;height:46px;border-radius:10px;">
+      <div>
+        <h1>Smart Study Planner</h1>
+        <div class="small">Create goals, set reminders and view your study timeline.</div>
+      </div>
+    </header>
+
+    <div class="top">
+      <section class="card" aria-labelledby="add-task">
+        <h3 id="add-task">Add / Edit Task</h3>
+        <div style="margin-top:10px">
+          <label>Title</label>
+          <input id="title" placeholder="e.g. Read chapter 4 - Algorithms">
+        </div>
+        <div style="margin-top:10px">
+          <label>Description</label>
+          <textarea id="desc" placeholder="Short notes or objective"></textarea>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <div style="flex:1">
+            <label>Start Date</label>
+            <input id="startDate" type="date">
+          </div>
+          <div style="width:120px">
+            <label>Due Date</label>
+            <input id="dueDate" type="date">
+          </div>
+        </div>
+        <div class="row" style="margin-top:10px">
+          <div style="flex:1">
+            <label>Priority</label>
+            <select id="priority"><option value="low">Low</option><option value="med">Medium</option><option value="high">High</option></select>
+          </div>
+          <div style="width:140px">
+            <label>Progress (%)</label>
+            <input id="progress" type="number" min="0" max="100" value="0">
+          </div>
+        </div>
+        <div style="display:flex; gap:8px; margin-top:12px">
+          <button id="saveBtn" class="btn">Save Task</button>
+          <button id="clearBtn" class="btn ghost">Clear Form</button>
+          <button id="notifyPermission" class="btn ghost" style="margin-left:auto">Enable Reminders</button>
+        </div>
+        <div class="tasks" id="tasks"></div>
+      </section>
+
+      <aside>
+        <div class="card">
+          <h3>Controls</h3>
+          <div style="margin-top:8px">
+            <label>Search</label>
+            <input id="search" placeholder="Filter by title or description">
+          </div>
+          <div style="margin-top:8px">
+            <label>Sort by</label>
+            <select id="sort"><option value="dateAsc">Due Date ↑</option><option value="dateDesc">Due Date ↓</option><option value="priority">Priority</option><option value="progress">Progress</option></select>
+          </div>
+          <div style="margin-top:12px; display:flex; gap:8px">
+            <button id="exportBtn" class="btn ghost">Export JSON</button>
+            <button id="importBtn" class="btn">Import JSON</button>
+          </div>
+          <div style="margin-top:12px">
+            <label>Quick stats</label>
+            <div class="small" id="stats">0 tasks • 0 completed</div>
+          </div>
+          <button id="showAllBtn" class="btn ghost" style="margin-top:10px">Show All Tasks</button>
+        </div>
+        <div class="card" style="margin-top:12px">
+          <h3>Timeline</h3>
+          <div class="timeline-wrap">
+            <canvas id="lineChart"></canvas>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <!-- Chart.js Library -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <script>
+    const LS_KEY = 'smart_study_tasks_v1';
+    const tasksEl = document.getElementById('tasks');
+    const ctx = document.getElementById('lineChart').getContext('2d');
+    let lineChart = null;
+    const showAllBtn = document.getElementById('showAllBtn');
+
+    let tasks = load();
+    let editId = null;
+    let selectedTaskId = null;
+
+    document.getElementById('saveBtn').addEventListener('click', saveTask);
+    document.getElementById('clearBtn').addEventListener('click', clearForm);
+    document.getElementById('search').addEventListener('input', render);
+    document.getElementById('sort').addEventListener('change', render);
+    document.getElementById('exportBtn').addEventListener('click', exportJSON);
+    document.getElementById('importBtn').addEventListener('click', importJSON);
+    document.getElementById('notifyPermission').addEventListener('click', requestNotificationPermission);
+    showAllBtn.addEventListener('click', ()=>{
+      selectedTaskId = null;
+      render();
+    });
+
+    render();
+
+    function uid(){return 't'+Math.random().toString(36).slice(2,9);}
+
+    function saveTask(){
+      const title = document.getElementById('title').value.trim();
+      if(!title) return alert('Give the task a title');
+      const desc = document.getElementById('desc').value.trim();
+      const start = document.getElementById('startDate').value || formatDate(new Date());
+      const due = document.getElementById('dueDate').value || start;
+      const priority = document.getElementById('priority').value;
+      const progress = Math.max(0, Math.min(100, Number(document.getElementById('progress').value || 0)));
+      const obj = {
+        id: editId || uid(),
+        title, desc, start, due, priority, progress,
+        created: new Date().toISOString(),
+        updated: new Date().toISOString()
+      };
+      if(editId){
+        tasks = tasks.map(t=> t.id===editId ? obj : t);
+        editId = null;
+      } else {
+        tasks.push(obj);
+      }
+      save();
+      render();
+      clearForm();
+    }
+
+    function clearForm(){
+      editId = null;
+      document.getElementById('title').value='';
+      document.getElementById('desc').value='';
+      document.getElementById('startDate').value='';
+      document.getElementById('dueDate').value='';
+      document.getElementById('priority').value='med';
+      document.getElementById('progress').value=0;
+    }
+
+    function render(){
+      const q = document.getElementById('search').value.toLowerCase();
+      const sort = document.getElementById('sort').value;
+      let list = tasks.slice();
+      if(q) list = list.filter(t=> (t.title+t.desc).toLowerCase().includes(q));
+      if(sort==='dateAsc') list.sort((a,b)=> new Date(a.due)-new Date(b.due));
+      if(sort==='dateDesc') list.sort((a,b)=> new Date(b.due)-new Date(a.due));
+      if(sort==='priority') list.sort((a,b)=> priorityRank(b.priority)-priorityRank(a.priority));
+      if(sort==='progress') list.sort((a,b)=> b.progress - a.progress);
+
+      tasksEl.innerHTML='';
+      list.forEach(t=>{
+        const el = document.createElement('div');
+        el.className = 'task';
+        const meta = document.createElement('div');
+        meta.className = 'meta';
+        const title = document.createElement('div');
+        title.className = 'title';
+        title.textContent = t.title;
+        const small = document.createElement('div');
+        small.className = 'small';
+        small.innerHTML = `${t.start} → ${t.due} • ${t.priority.toUpperCase()} • ${t.desc || ''}`;
+        const progWrap = document.createElement('div');
+        progWrap.className = 'progress';
+        const bar = document.createElement('i');
+        bar.style.width = t.progress + '%';
+        progWrap.appendChild(bar);
+        meta.appendChild(title);
+        meta.appendChild(small);
+        meta.appendChild(progWrap);
+        el.appendChild(meta);
+
+        const controls = document.createElement('div');
+        controls.className = 'controls';
+        const edit = document.createElement('button');
+        edit.className = 'btn ghost';
+        edit.textContent = 'Edit';
+        edit.onclick = ()=> loadForEdit(t.id);
+        const del = document.createElement('button');
+        del.className = 'btn ghost';
+        del.textContent = 'Delete';
+        del.onclick = ()=>{ if(confirm('Delete this task?')){ tasks = tasks.filter(x=>x.id!==t.id); save(); render(); }};
+        const mark = document.createElement('button');
+        mark.className = 'btn';
+        mark.textContent = 'Mark Done';
+        mark.onclick = ()=>{ t.progress = 100; t.updated = new Date().toISOString(); tasks = tasks.map(x=> x.id===t.id ? t : x); save(); render(); };
+        controls.appendChild(edit);
+        controls.appendChild(del);
+        controls.appendChild(mark);
+        el.appendChild(controls);
+
+        el.addEventListener('click', ()=>{
+          selectedTaskId = t.id;
+          render();
+        });
+
+        tasksEl.appendChild(el);
+      });
+
+      updateStats();
+
+      if(selectedTaskId){
+        const selectedTask = tasks.find(t=>t.id === selectedTaskId);
+        if(selectedTask){
+          renderLineChart([selectedTask]);
+        } else {
+          selectedTaskId = null;
+          renderLineChart(list);
+        }
+      } else {
+        renderLineChart(list);
+      }
+    }
+
+    function loadForEdit(id){
+      const t = tasks.find(x=>x.id===id);
+      if(!t) return;
+      editId = id;
+      document.getElementById('title').value = t.title;
+      document.getElementById('desc').value = t.desc;
+      document.getElementById('startDate').value = t.start;
+      document.getElementById('dueDate').value = t.due;
+      document.getElementById('priority').value = t.priority;
+      document.getElementById('progress').value = t.progress;
+      window.scrollTo({top:0, behavior:'smooth'});
+    }
+
+    function updateStats(){
+      const total = tasks.length;
+      const done = tasks.filter(t=>t.progress>=100).length;
+      document.getElementById('stats').textContent = `${total} tasks • ${done} completed`;
+    }
+
+    function priorityRank(p){ if(p==='high') return 3; if(p==='med') return 2; return 1; }
+    function formatDate(d){ return d.toISOString().slice(0,10); }
+    function addDays(date, days){ const d = new Date(date); d.setDate(d.getDate()+days); return d; }
+
+    function save(){ localStorage.setItem(LS_KEY, JSON.stringify(tasks)); }
+    function load(){ try{ return JSON.parse(localStorage.getItem(LS_KEY) || '[]'); }catch(e){ return []; } }
+
+    function exportJSON(){
+      const a = document.createElement('a');
+      const file = new Blob([JSON.stringify(tasks, null, 2)], {type: "application/json"});
+      a.href = URL.createObjectURL(file);
+      a.download = 'tasks.json';
+      a.click();
+    }
+
+    function importJSON(){
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'application/json';
+      input.onchange = e=>{
+        const f = e.target.files[0];
+        if(f){
+          const reader = new FileReader();
+          reader.onload = evt=>{
+            try{
+              const data = JSON.parse(evt.target.result);
+              if(Array.isArray(data)){
+                tasks = data.map(t=> ({...t, updated: new Date().toISOString()}));
+                save(); render();
+              } else alert('Invalid file format');
+            }catch(err){
+              alert('Error reading file');
+            }
+          }
+          reader.readAsText(f);
+        }
+      }
+      input.click();
+    }
+
+    function requestNotificationPermission(){
+      if(!('Notification' in window)) return alert('Not supported');
+      Notification.requestPermission().then(permission=>{
+        if(permission==='granted'){
+          alert('Notifications enabled!');
+        } else alert('Notifications denied.');
+      });
+    }
+
+    function renderLineChart(list){
+      const labels = list.map(t=> t.title);
+      const data = list.map(t=> t.progress);
+      if(lineChart){
+        lineChart.destroy();
+      }
+      lineChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Progress (%)',
+            data: data,
+            fill: false,
+            borderColor: 'rgba(124, 156, 255, 1)',
+            backgroundColor: 'rgba(124, 156, 255, 0.2)',
+            tension: 0.4,
+            pointRadius: 6,
+            pointBackgroundColor: 'rgba(124, 156, 255, 1)'
+          }]
+        },
+        options: {
+          responsive: true,
+          scales: {
+            y: {
+              beginAtZero: true,
+              max: 100,
+              ticks: {
+                color: '#9aa7b2'
+              }
+            },
+            x: {
+              ticks: {
+                color: '#9aa7b2'
+              }
+            }
+          },
+          plugins: {
+            legend: {
+              labels: {
+                color: '#9aa7b2'
+              }
+            },
+            tooltip: {
+              callbacks: {
+                label: function(context) {
+                  return context.dataset.label + ': ' + context.parsed.y + '%';
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    if(!tasks.length){
+      tasks = [
+        {
+          id: uid(),
+          title: 'Read Chapter 4 - Algorithms',
+          desc: 'Focus on divide and conquer examples',
+          start: formatDate(new Date()),
+          due: formatDate(addDays(new Date(), 2)),
+          priority: 'high',
+          progress: 20,
+          created: new Date().toISOString(),
+          updated: new Date().toISOString()
+        },
+        {
+          id: uid(),
+          title: 'Practice 20 DSA problems',
+          desc: 'Use platform for timed practice',
+          start: formatDate(addDays(new Date(), 1)),
+          due: formatDate(addDays(new Date(), 6)),
+          priority: 'med',
+          progress: 10,
+          created: new Date().toISOString(),
+          updated: new Date().toISOString()
+        }
+      ];
+      save();
+    }
+  </script>
+</body>
+</html>
